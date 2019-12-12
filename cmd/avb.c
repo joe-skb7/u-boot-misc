@@ -276,7 +276,7 @@ int do_avb_verify_part(cmd_tbl_t *cmdtp, int flag,
 
 		/* export additional bootargs to AVB_BOOTARGS env var */
 
-		extra_args = avb_set_state(avb_ops, AVB_GREEN);
+		extra_args = avb_set_state(avb_ops, AVB_ORANGE);
 		if (extra_args)
 			cmdline = append_cmd_line(out_data->cmdline,
 						  extra_args);
