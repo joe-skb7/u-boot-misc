@@ -5,7 +5,6 @@
  */
 
 #include <image-android-dt.h>
-#include <dt_table.h>
 #include <common.h>
 #include <linux/libfdt.h>
 #include <mapmem.h>
@@ -69,6 +68,77 @@ bool android_dt_get_fdt_by_index(ulong hdr_addr, u32 index, ulong *addr,
 		*addr = hdr_addr + dt_offset;
 	if (size)
 		*size = dt_size;
+
+	return true;
+}
+
+/**
+ * Get FDT (dtb or dtbo) address/size/index in DT image by dt_table_entry field
+ *
+ * @param hdr_addr Start address of DT image
+ * @param dte Pointer to dt_table_entry containing data of the desired FDT
+ * @param[out] addr If not NULL, will contain address of the desired FDT
+ * @param[out] size If not NULL, will contain size of the desired FDT
+ * @param[out] index If not NULL, will contain index of the desired FDT
+ *
+ * @return true on success or false on error
+ */
+bool android_dt_get_fdt_by_field(ulong hdr_addr, struct dt_table_entry *dte,
+				 ulong *addr, u32 *size, u32 *index)
+{
+	const struct dt_table_header *hdr;
+	const struct dt_table_entry *e;
+	u32 entry_count, entries_offset, entry_size;
+	ulong e_addr;
+	u32 dt_offset, dt_size, dt_id, dt_rev;
+	char buf[64] = "";
+	int i;
+
+	hdr = map_sysmem(hdr_addr, sizeof(*hdr));
+	entry_count = fdt32_to_cpu(hdr->dt_entry_count);
+	entries_offset = fdt32_to_cpu(hdr->dt_entries_offset);
+	entry_size = fdt32_to_cpu(hdr->dt_entry_size);
+	unmap_sysmem(hdr);
+
+	for (i = 0; i < entry_count; i++) {
+		e_addr = hdr_addr + entries_offset + i * entry_size;
+		e = map_sysmem(e_addr, sizeof(*e));
+		dt_offset = fdt32_to_cpu(e->dt_offset);
+		dt_size = fdt32_to_cpu(e->dt_size);
+		dt_id = fdt32_to_cpu(e->id);
+		dt_rev = fdt32_to_cpu(e->rev);
+		unmap_sysmem(e);
+
+		if (dte->id && dte->rev) {
+			if (dte->id == dt_id && dte->rev == dt_rev)
+				goto found;
+
+			snprintf(buf, sizeof(buf), "id=0x%x && rev=0x%x",
+				 dte->id, dte->rev);
+		} else if (dte->id) {
+			if (dte->id == dt_id)
+				goto found;
+
+			snprintf(buf, sizeof(buf), "id=0x%x", dte->id);
+		} else if (dte->rev) {
+			if (dte->rev == dt_rev)
+				goto found;
+
+			snprintf(buf, sizeof(buf), "rev=0x%x", dte->rev);
+		}
+	}
+
+	printf("Error: No DT found with %s\n", buf);
+
+	return false;
+
+found:
+	if (addr)
+		*addr = hdr_addr + dt_offset;
+	if (size)
+		*size = dt_size;
+	if (index)
+		*index = i;
 
 	return true;
 }
