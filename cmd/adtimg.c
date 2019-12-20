@@ -11,6 +11,9 @@
 #include <linux/ctype.h>   /* isalpha */
 
 #define OPT_INDEX	"--index"
+#define OPT_ID		"--id"
+#define OPT_REV		"--rev"
+#define OPT_MAXLEN	8
 
 #ifdef pr_err
 #undef pr_err
@@ -167,6 +170,110 @@ static int adtimg_get_dt_by_index(int argc, char * const argv[])
 	return CMD_RET_SUCCESS;
 }
 
+static int adtimg_getopt_fields(int argc, char * const argv[],
+				struct dt_table_entry *dte,
+				char **avar, char **svar, char **ivar)
+{
+	bool found = false;
+
+	if (!dte || !argv || !avar || !svar || !ivar)
+		return CMD_RET_FAILURE;
+
+	for (int i = 0; i < argc; i++) {
+		char *opt = argv[i];
+		struct adtimg_opt_dt_map {
+			char optname[OPT_MAXLEN];
+			u32 *optptr;
+		} t[] = {
+			{ OPT_ID, &dte->id },
+			{ OPT_REV, &dte->rev },
+		};
+		int j, ret, cnt = ARRAY_SIZE(t);
+
+		for (j = 0; j < cnt; j++) {
+			char *name = t[j].optname;
+			u32 *ptr = t[j].optptr;
+
+			if (!strncmp(argv[i], name, strlen(name))) {
+				ret = adtimg_getopt_u32(opt, name, ptr);
+				if (ret != CMD_RET_SUCCESS)
+					return ret;
+
+				if (!*ptr) {
+					/*
+					 * 'Zero' means 'unused', hence
+					 * forbid zero values in user input
+					 */
+					pr_err("0 not allowed in '%s'\n", opt);
+					return CMD_RET_FAILURE;
+				}
+
+				found = true;
+				break;
+			}
+		}
+
+		if (j < cnt)
+			continue;
+
+		if (!isalpha(*opt)) {
+			pr_err("Option '%s' not supported\n", opt);
+			return CMD_RET_FAILURE;
+		}
+
+		if (!*avar) {
+			*avar = opt;
+		} else if (!*svar) {
+			*svar = opt;
+		} else if (!*ivar) {
+			*ivar = opt;
+		} else {
+			pr_err("Option '%s' not expected\n", opt);
+			return CMD_RET_FAILURE;
+		}
+	}
+
+	if (!found) {
+		pr_err("No --option given (check usage)\n");
+		return CMD_RET_FAILURE;
+	}
+
+	return CMD_RET_SUCCESS;
+}
+
+static int adtimg_get_dt_by_field(int argc, char * const argv[])
+{
+	char *avar = NULL, *svar = NULL, *ivar = NULL;
+	struct dt_table_entry dte = {0};
+	ulong addr;
+	u32 sz, idx;
+	int ret;
+
+	ret = adtimg_getopt_fields(argc, argv, &dte, &avar, &svar, &ivar);
+	if (ret != CMD_RET_SUCCESS)
+		return ret;
+
+	if (!android_dt_get_fdt_by_field(working_img, &dte, &addr, &sz, &idx))
+		return CMD_RET_FAILURE;
+
+	if (avar && svar && ivar) {
+		env_set_hex(avar, addr);
+		env_set_hex(svar, sz);
+		env_set_hex(ivar, idx);
+	} else if (avar && svar) {
+		env_set_hex(avar, addr);
+		env_set_hex(svar, sz);
+		printf("0x%x (%d)\n", idx, idx);
+	} else if (avar) {
+		env_set_hex(avar, addr);
+		printf("0x%x (%d), 0x%x (%d)\n", sz, sz, idx, idx);
+	} else {
+		printf("0x%lx, 0x%x (%d), 0x%x (%d)\n", addr, sz, sz, idx, idx);
+	}
+
+	return CMD_RET_SUCCESS;
+}
+
 static int adtimg_get_dt(int argc, char * const argv[])
 {
 	if (argc < 2) {
@@ -181,8 +288,7 @@ static int adtimg_get_dt(int argc, char * const argv[])
 	if (!strncmp(argv[0], OPT_INDEX, sizeof(OPT_INDEX) - 1))
 		return adtimg_get_dt_by_index(argc, argv);
 
-	pr_err("Option '%s' not supported\n", argv[0]);
-	return CMD_RET_FAILURE;
+	return adtimg_get_dt_by_field(argc, argv);
 }
 
 static int do_adtimg_get(cmd_tbl_t *cmdtp, int flag, int argc,
@@ -237,10 +343,14 @@ U_BOOT_CMD(
 	"addr <addr> - Set image location to <addr>\n"
 	"adtimg dump        - Print out image contents\n"
 	"adtimg get dt --index=<index> [avar [svar]]         - Get DT address/size by index\n"
-	"\n"
+	"adtimg get dt --<fname>=<fval> [avar [svar [ivar]]] - Get DT address/size/index\n"
+	"                                                      by field in dt_table_entry\n"
 	"Legend:\n"
 	"  - <addr>: DTB/DTBO image address (hex) in RAM\n"
 	"  - <index>: index (hex/dec) of desired DT in the image\n"
+	"  - <fname>: dt_table_entry field name. Supported values: id, rev\n"
+	"  - <fval>: field value (hex/dec) associated to <fname>\n"
 	"  - <avar>: variable name to contain DT address (hex)\n"
-	"  - <svar>: variable name to contain DT size (hex)"
+	"  - <svar>: variable name to contain DT size (hex)\n"
+	"  - <ivar>: variable name to contain DT index (hex)"
 );
