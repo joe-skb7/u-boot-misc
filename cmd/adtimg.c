@@ -8,6 +8,12 @@
 #include <image-android-dt.h>
 #include <common.h>
 
+#ifdef pr_err
+#undef pr_err
+#endif
+
+#define pr_err(fmt, args...) printf("Error: " fmt, ##args)
+
 enum cmd_adtimg_info {
 	CMD_ADTIMG_START = 0,
 	CMD_ADTIMG_SIZE,
@@ -24,12 +30,12 @@ static int do_adtimg_dump(cmd_tbl_t *cmdtp, int flag, int argc,
 
 	hdr_addr = simple_strtoul(argv[1], &endp, 16);
 	if (*endp != '\0') {
-		printf("Error: Wrong image address\n");
+		pr_err("Wrong image address\n");
 		return CMD_RET_FAILURE;
 	}
 
 	if (!android_dt_check_header(hdr_addr)) {
-		printf("Error: DT image header is incorrect\n");
+		pr_err("DT image header is incorrect\n");
 		return CMD_RET_FAILURE;
 	}
 
@@ -53,18 +59,18 @@ static int adtimg_get_fdt(int argc, char * const argv[],
 
 	hdr_addr = simple_strtoul(argv[1], &endp, 16);
 	if (*endp != '\0') {
-		printf("Error: Wrong image address\n");
+		pr_err("Wrong image address\n");
 		return CMD_RET_FAILURE;
 	}
 
 	if (!android_dt_check_header(hdr_addr)) {
-		printf("Error: DT image header is incorrect\n");
+		pr_err("DT image header is incorrect\n");
 		return CMD_RET_FAILURE;
 	}
 
 	index = simple_strtoul(argv[2], &endp, 0);
 	if (*endp != '\0') {
-		printf("Error: Wrong index\n");
+		pr_err("Wrong index\n");
 		return CMD_RET_FAILURE;
 	}
 
@@ -79,7 +85,7 @@ static int adtimg_get_fdt(int argc, char * const argv[],
 		snprintf(buf, sizeof(buf), "%x", fdt_size);
 		break;
 	default:
-		printf("Error: Unknown cmd_adtimg_info value: %d\n", cmd);
+		pr_err("Unknown cmd_adtimg_info value: %d\n", cmd);
 		return CMD_RET_FAILURE;
 	}
 
